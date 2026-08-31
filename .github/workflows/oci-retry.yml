@@ -1,1 +1,49 @@
-name: OCI Retry on: schedule: - cron: '*/20 * * * *' workflow_dispatch: jobs: retry: runs-on: ubuntu-latest timeout-minutes: 350 steps: - name: Instala OCI CLI run: pip install oci-cli - name: Configura credenciais run: | mkdir -p ~/.oci echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/key.pem chmod 600 ~/.oci/key.pem cat > ~/.oci/config << EOF [DEFAULT] user=${{ secrets.OCI_USER_OCID }} fingerprint=${{ secrets.OCI_FINGERPRINT }} tenancy=${{ secrets.OCI_TENANCY_OCID }} region=${{ secrets.OCI_REGION }} key_file=~/.oci/key.pem EOF - name: Loop de tentativas run: | STACK_ID="${{ secrets.OCI_STACK_ID }}" END=$((SECONDS+20700)) while [ $SECONDS -lt $END ]; do echo "Tentativa em $(date)" oci resource-manager job create-apply-job \ --stack-id $STACK_ID \ --execution-plan-strategy AUTO_APPROVED \ --wait-for-state SUCCEEDED --wait-for-state FAILED \ --max-wait-seconds 120 || true STATUS=$(oci resource-manager job list --stack-id $STACK_ID --sort-by TIMECREATED --sort-order DESC --limit 1 --query 'data[0]."lifecycle-state"' --raw-output) echo "Status: $STATUS" if [ "$STATUS" == "SUCCEEDED" ]; then echo "SUCESSO! Instância criada." exit 0 fi sleep 60 done echo "Tempo esgotado nesta execução, o agendamento tenta de novo em breve."
+name: OCI Retry
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Instala OCI CLI
+        run: pip install oci-cli
+
+      - name: Configura credenciais
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          key_file=~/.oci/key.pem
+          EOF
+
+      - name: Loop de tentativas
+        run: |
+          STACK_ID="${{ secrets.OCI_STACK_ID }}"
+          END=$((SECONDS+20700))
+          while [ $SECONDS -lt $END ]; do
+            echo "Tentativa em $(date)"
+            oci resource-manager job create-apply-job \
+              --stack-id $STACK_ID \
+              --execution-plan-strategy AUTO_APPROVED \
+              --wait-for-state SUCCEEDED --wait-for-state FAILED \
+              --max-wait-seconds 120 || true
+            STATUS=$(oci resource-manager job list --stack-id $STACK_ID --sort-by TIMECREATED --sort-order DESC --limit 1 --query 'data[0]."lifecycle-state"' --raw-output)
+            echo "Status: $STATUS"
+            if [ "$STATUS" == "SUCCEEDED" ]; then
+              echo "SUCESSO! Instância criada."
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "Tempo esgotado nesta execução, o agendamento tenta de novo em breve."
