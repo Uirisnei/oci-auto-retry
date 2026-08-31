@@ -42,6 +42,7 @@ jobs:
             echo "Status: $STATUS"
             if [ "$STATUS" == "SUCCEEDED" ]; then
               echo "SUCESSO! Instância criada."
+              curl -d "Sua instancia OCI foi criada com sucesso! ✅" ntfy.sh/${{ secrets.NTFY_TOPIC }}
               exit 0
             fi
             sleep 60
